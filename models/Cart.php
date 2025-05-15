@@ -258,18 +258,57 @@ class Cart {
         // Check if cart has items
         $items = $this->getCartItems($cart_id);
         if (empty($items)) {
+            error_log("Checkout failed: Cart is empty for cart_id=$cart_id");
             return ['success' => false, 'message' => 'Cart is empty'];
         }
         
-        // Use the stored procedure to finalize the order
-        $order_id = 0;
-        $result = $this->db->callProcedure("FinalizeOrder", [$cart_id, $user_id, &$order_id]);
+        error_log("Starting checkout process for cart_id=$cart_id, user_id=$user_id");
         
-        if ($order_id > 0) {
-            return ['success' => true, 'order_id' => $order_id];
+        // Begin transaction
+        $this->db->beginTransaction();
+        
+        try {
+            // Using a direct query to call the procedure with output parameter
+            $conn = $this->db->getConnection();
+            
+            error_log("Calling FinalizeOrder procedure for cart_id=$cart_id");
+            
+            // Prepare call statement with output parameter
+            $stmt = $conn->prepare("CALL FinalizeOrder(?, ?, @order_id)");
+            $stmt->bind_param("ii", $cart_id, $user_id);
+            $stmt->execute();
+            
+            // Get the output parameter value
+            $result = $conn->query("SELECT @order_id as order_id");
+            $row = $result->fetch_assoc();
+            $order_id = $row['order_id'];
+            
+            error_log("FinalizeOrder procedure completed. order_id=" . ($order_id ?? 'NULL'));
+            
+            if ($order_id) {
+                // Process the order to trigger the stock update
+                error_log("Processing order #$order_id");
+                require_once 'models/Order.php';
+                $orderModel = new Order();
+                $orderModel->processOrder($order_id);
+                
+                // Commit the transaction
+                $this->db->commit();
+                error_log("Order #$order_id created successfully, transaction committed");
+                
+                return ['success' => true, 'order_id' => $order_id];
+            } else {
+                // Rollback on failure
+                $this->db->rollback();
+                error_log("Failed to create order - order_id is empty or null");
+                return ['success' => false, 'message' => 'Failed to create order'];
+            }
+        } catch (Exception $e) {
+            // Rollback on exception
+            $this->db->rollback();
+            error_log("Exception during checkout: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error: ' . $e->getMessage()];
         }
-        
-        return ['success' => false, 'message' => 'Failed to create order'];
     }
 }
 ?> 

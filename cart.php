@@ -1,19 +1,30 @@
 <?php
 session_start();
+require_once 'models/Cart.php';
+require_once 'models/Product.php';
 
-// Initialize cart if it doesn't exist
-if (!isset($_SESSION['cart'])) {
-    $_SESSION['cart'] = [];
+// Initialize Cart model
+$cartModel = new Cart();
+
+// Get or create cart
+$session_id = session_id();
+$cart = $cartModel->getCart($_SESSION['user_id'] ?? null, $session_id);
+
+if (!$cart) {
+    // If no cart exists, create a new one
+    $cart = $cartModel->getCart($_SESSION['user_id'] ?? null, $session_id);
 }
+
+$cart_id = $cart['id'] ?? 0;
+$cart_items = $cart_id ? $cartModel->getCartItems($cart_id) : [];
+$cart_total = $cart_id ? $cartModel->getCartTotal($cart_id) : 0;
 
 // Handle removing item from cart
 if (isset($_GET['remove']) && !empty($_GET['remove'])) {
-    $product_id = (int)$_GET['remove'];
+    $cart_item_id = (int)$_GET['remove'];
     
-    // Filter out the product to be removed
-    $_SESSION['cart'] = array_filter($_SESSION['cart'], function($item) use ($product_id) {
-        return $item['product_id'] !== $product_id;
-    });
+    // Remove item from database cart
+    $cartModel->removeItem($cart_item_id);
     
     // Redirect back to cart page
     header('Location: cart.php');
@@ -21,30 +32,27 @@ if (isset($_GET['remove']) && !empty($_GET['remove'])) {
 }
 
 // Handle updating cart quantities
-if (isset($_POST['update_cart'])) {
-    foreach ($_POST['quantity'] as $product_id => $quantity) {
-        $product_id = (int)$product_id;
+if (isset($_POST['update_cart']) && isset($_POST['quantity']) && isset($_POST['item_id'])) {
+    foreach ($_POST['quantity'] as $index => $quantity) {
+        $cart_item_id = (int)$_POST['item_id'][$index];
         $quantity = (int)$quantity;
         
+        // Update quantity or remove if zero
         if ($quantity <= 0) {
-            // Remove item if quantity is 0 or negative
-            $_SESSION['cart'] = array_filter($_SESSION['cart'], function($item) use ($product_id) {
-                return $item['product_id'] !== $product_id;
-            });
+            $cartModel->removeItem($cart_item_id);
         } else {
-            // Update quantity
-            foreach ($_SESSION['cart'] as &$item) {
-                if ($item['product_id'] === $product_id) {
-                    $item['quantity'] = $quantity;
-                    break;
-                }
-            }
+            $cartModel->updateItemQuantity($cart_item_id, $quantity);
         }
     }
     
     // Redirect back to cart page
     header('Location: cart.php');
     exit;
+}
+
+// Update cart count in session
+if ($cart_id) {
+    $_SESSION['cart_count'] = $cartModel->getCartItemCount($cart_id);
 }
 
 // Include header
@@ -54,7 +62,7 @@ include 'includes/header.php';
 <main class="container">
     <h1>Your Shopping Cart</h1>
     
-    <?php if (empty($_SESSION['cart'])): ?>
+    <?php if (empty($cart_items)): ?>
         <div class="empty-cart">
             <p>Your cart is empty.</p>
             <a href="products.php" class="btn">Continue Shopping</a>
@@ -71,13 +79,31 @@ include 'includes/header.php';
                         <th>Action</th>
                     </tr>
                 </thead>
-                <tbody id="cart-items">
-                    <!-- Cart items will be loaded here by JavaScript -->
+                <tbody>
+                    <?php foreach ($cart_items as $item): ?>
+                        <tr>
+                            <td class="product-info">
+                                <img src="<?php echo htmlspecialchars($item['image']); ?>" alt="<?php echo htmlspecialchars($item['name']); ?>" class="cart-product-image">
+                                <div>
+                                    <h3><?php echo htmlspecialchars($item['name']); ?></h3>
+                                </div>
+                            </td>
+                            <td class="product-price">$<?php echo number_format($item['price'], 2); ?></td>
+                            <td class="product-quantity">
+                                <input type="number" name="quantity[]" min="0" value="<?php echo $item['quantity']; ?>">
+                                <input type="hidden" name="item_id[]" value="<?php echo $item['id']; ?>">
+                            </td>
+                            <td class="product-total">$<?php echo number_format($item['price'] * $item['quantity'], 2); ?></td>
+                            <td class="product-remove">
+                                <a href="cart.php?remove=<?php echo $item['id']; ?>" class="remove-item">Remove</a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
                 </tbody>
                 <tfoot>
                     <tr>
                         <td colspan="3" class="text-right"><strong>Subtotal:</strong></td>
-                        <td id="cart-subtotal"></td>
+                        <td>$<?php echo number_format($cart_total, 2); ?></td>
                         <td></td>
                     </tr>
                 </tfoot>
@@ -91,51 +117,6 @@ include 'includes/header.php';
         </form>
     <?php endif; ?>
 </main>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Get cart from session (This would normally come from the PHP session, but for now we'll use our client-side data)
-    const cartItems = <?php echo json_encode($_SESSION['cart']); ?>;
-    
-    if (cartItems.length > 0) {
-        const cartTableBody = document.getElementById('cart-items');
-        let subtotal = 0;
-        
-        cartItems.forEach(item => {
-            // Find product details
-            const product = products.find(p => p.id === item.product_id);
-            
-            if (product) {
-                const total = product.price * item.quantity;
-                subtotal += total;
-                
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td class="product-info">
-                        <img src="${product.image}" alt="${product.name}" class="cart-product-image">
-                        <div>
-                            <h3>${product.name}</h3>
-                        </div>
-                    </td>
-                    <td class="product-price">$${product.price.toFixed(2)}</td>
-                    <td class="product-quantity">
-                        <input type="number" name="quantity[${product.id}]" min="1" value="${item.quantity}">
-                    </td>
-                    <td class="product-total">$${total.toFixed(2)}</td>
-                    <td class="product-remove">
-                        <a href="cart.php?remove=${product.id}" class="remove-item">Remove</a>
-                    </td>
-                `;
-                
-                cartTableBody.appendChild(tr);
-            }
-        });
-        
-        // Update subtotal
-        document.getElementById('cart-subtotal').textContent = `$${subtotal.toFixed(2)}`;
-    }
-});
-</script>
 
 <style>
 .cart-table {

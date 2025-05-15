@@ -69,59 +69,74 @@ class Database {
      * Call a stored procedure
      */
     public function callProcedure($procedure, $params = []) {
-        // Build the parameter placeholders
-        $placeholders = str_repeat('?, ', count($params) - 1) . '?';
-        
-        // Only add parameters if there are any
-        $query = "CALL $procedure(" . (empty($params) ? '' : $placeholders) . ")";
-        
-        $stmt = $this->conn->prepare($query);
-        
-        if (!empty($params)) {
-            // Determine parameter types
-            $types = '';
-            foreach ($params as $param) {
-                if (is_int($param)) {
-                    $types .= 'i'; // integer
-                } elseif (is_float($param)) {
-                    $types .= 'd'; // double
-                } elseif (is_string($param)) {
-                    $types .= 's'; // string
-                } else {
-                    $types .= 'b'; // blob
-                }
+        try {
+            // Build the parameter placeholders
+            $placeholders = str_repeat('?, ', count($params) - 1) . '?';
+            
+            // Only add parameters if there are any
+            $query = "CALL $procedure(" . (empty($params) ? '' : $placeholders) . ")";
+            
+            $stmt = $this->conn->prepare($query);
+            if (!$stmt) {
+                throw new Exception("Failed to prepare statement: " . $this->conn->error);
             }
             
-            // Bind parameters
-            $stmt->bind_param($types, ...$params);
-        }
-        
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        $output = [];
-        if ($result) {
-            // Collect all result sets
-            do {
-                $rows = [];
-                while ($row = $result->fetch_assoc()) {
-                    $rows[] = $row;
-                }
-                if (!empty($rows)) {
-                    $output[] = $rows;
+            if (!empty($params)) {
+                // Determine parameter types
+                $types = '';
+                foreach ($params as $param) {
+                    if (is_int($param)) {
+                        $types .= 'i'; // integer
+                    } elseif (is_float($param)) {
+                        $types .= 'd'; // double
+                    } elseif (is_string($param)) {
+                        $types .= 's'; // string
+                    } else {
+                        $types .= 'b'; // blob
+                    }
                 }
                 
-                if ($stmt->more_results()) {
-                    $stmt->next_result();
-                    $result = $stmt->get_result();
-                } else {
-                    break;
-                }
-            } while (true);
+                // Bind parameters
+                $stmt->bind_param($types, ...$params);
+            }
+            
+            if (!$stmt->execute()) {
+                throw new Exception("Failed to execute statement: " . $stmt->error);
+            }
+            
+            $result = $stmt->get_result();
+            
+            $output = [];
+            if ($result) {
+                // Collect all result sets
+                do {
+                    $rows = [];
+                    while ($row = $result->fetch_assoc()) {
+                        $rows[] = $row;
+                    }
+                    if (!empty($rows)) {
+                        $output[] = $rows;
+                    }
+                    
+                    if ($stmt->more_results()) {
+                        $stmt->next_result();
+                        $result = $stmt->get_result();
+                        // If we get a false result, break the loop
+                        if ($result === false) {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                } while (true);
+            }
+            
+            $stmt->close();
+            return $output;
+        } catch (Exception $e) {
+            error_log("Error calling procedure $procedure: " . $e->getMessage());
+            return false;
         }
-        
-        $stmt->close();
-        return $output;
     }
     
     /**

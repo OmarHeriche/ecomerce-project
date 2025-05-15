@@ -67,8 +67,8 @@
                         <li>
                             <a href="cart.php" class="cart-icon">
                                 Cart
-                                <?php if (isset($_SESSION['cart']) && !empty($_SESSION['cart'])): ?>
-                                    <span class="cart-count"><?php echo count($_SESSION['cart']); ?></span>
+                                <?php if (isset($_SESSION['cart_count']) && $_SESSION['cart_count'] > 0): ?>
+                                    <span class="cart-count"><?php echo $_SESSION['cart_count']; ?></span>
                                 <?php endif; ?>
                             </a>
                         </li>

@@ -1,8 +1,28 @@
 <?php
 session_start();
+require_once 'models/Cart.php';
+require_once 'models/Product.php';
+require_once 'models/Order.php';
+
+// Initialize models
+$cartModel = new Cart();
+$orderModel = new Order();
+
+// Get or create cart
+$session_id = session_id();
+$cart = $cartModel->getCart($_SESSION['user_id'] ?? null, $session_id);
+
+if (!$cart) {
+    // If no cart exists, create a new one
+    $cart = $cartModel->getCart($_SESSION['user_id'] ?? null, $session_id);
+}
+
+$cart_id = $cart['id'] ?? 0;
+$cart_items = $cart_id ? $cartModel->getCartItems($cart_id) : [];
+$cart_total = $cart_id ? $cartModel->getCartTotal($cart_id) : 0;
 
 // Check if cart is empty
-if (!isset($_SESSION['cart']) || empty($_SESSION['cart'])) {
+if (empty($cart_items)) {
     // Redirect to cart page
     header('Location: cart.php');
     exit;
@@ -10,18 +30,34 @@ if (!isset($_SESSION['cart']) || empty($_SESSION['cart'])) {
 
 // Check if user is logged in
 $logged_in = isset($_SESSION['user_id']);
+$user_id = $_SESSION['user_id'] ?? 0;
 
 // Handle checkout submission
 $order_success = false;
+$order_id = 0;
+$error_message = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
-    // In a real app, we would process the order, save to database, etc.
-    // For now, just simulate order completion
-    
-    // Clear the cart
-    $_SESSION['cart'] = [];
-    
-    // Set success flag
-    $order_success = true;
+    if ($logged_in) {
+        // Process the order through database
+        $result = $cartModel->checkout($cart_id, $user_id);
+        
+        if ($result['success']) {
+            $order_id = $result['order_id'];
+            $order_success = true;
+            
+            // Update cart count in session
+            $_SESSION['cart_count'] = 0;
+        } else {
+            $error_message = $result['message'] ?? 'Unable to process your order. Please try again.';
+            error_log("Checkout failed: " . $error_message);
+        }
+    } else {
+        // For guest checkout, just clear the cart
+        $cartModel->clearCart($cart_id);
+        $order_success = true;
+        $_SESSION['cart_count'] = 0;
+    }
 }
 
 // Include header
@@ -33,10 +69,22 @@ include 'includes/header.php';
         <div class="order-success">
             <h1>Order Placed Successfully!</h1>
             <p>Thank you for your purchase. Your order has been received and is being processed.</p>
+            <?php if ($order_id): ?>
+                <p>Your order ID is: <strong>#<?php echo $order_id; ?></strong></p>
+            <?php endif; ?>
             <a href="products.php" class="btn">Continue Shopping</a>
+            <?php if ($logged_in): ?>
+                <a href="order-history.php" class="btn">View Your Orders</a>
+            <?php endif; ?>
         </div>
     <?php else: ?>
         <h1>Checkout</h1>
+        
+        <?php if (!empty($error_message)): ?>
+            <div class="error-message">
+                <?php echo htmlspecialchars($error_message); ?>
+            </div>
+        <?php endif; ?>
         
         <?php if (!$logged_in): ?>
             <div class="checkout-login-message">
@@ -105,21 +153,29 @@ include 'includes/header.php';
             
             <div class="order-summary">
                 <h2>Order Summary</h2>
-                <div id="checkout-items">
-                    <!-- Order items will be loaded here by JavaScript -->
+                <div class="checkout-items">
+                    <?php foreach ($cart_items as $item): ?>
+                        <div class="checkout-item">
+                            <div class="item-details">
+                                <h3><?php echo htmlspecialchars($item['name']); ?></h3>
+                                <p>Quantity: <?php echo $item['quantity']; ?></p>
+                            </div>
+                            <div class="item-price">$<?php echo number_format($item['price'] * $item['quantity'], 2); ?></div>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
                 <div class="order-totals">
                     <div class="total-row">
                         <span>Subtotal:</span>
-                        <span id="checkout-subtotal"></span>
+                        <span>$<?php echo number_format($cart_total, 2); ?></span>
                     </div>
                     <div class="total-row">
                         <span>Shipping:</span>
-                        <span id="checkout-shipping">$5.00</span>
+                        <span>$5.00</span>
                     </div>
                     <div class="total-row grand-total">
                         <span>Total:</span>
-                        <span id="checkout-total"></span>
+                        <span>$<?php echo number_format($cart_total + 5.00, 2); ?></span>
                     </div>
                 </div>
             </div>
@@ -127,55 +183,21 @@ include 'includes/header.php';
     <?php endif; ?>
 </main>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    if (!document.getElementById('checkout-items')) return;
-    
-    // Get cart from session (This would normally come from the PHP session, but for now we'll use our client-side data)
-    const cartItems = <?php echo json_encode($_SESSION['cart']); ?>;
-    
-    if (cartItems.length > 0) {
-        const checkoutItems = document.getElementById('checkout-items');
-        let subtotal = 0;
-        
-        cartItems.forEach(item => {
-            // Find product details
-            const product = products.find(p => p.id === item.product_id);
-            
-            if (product) {
-                const total = product.price * item.quantity;
-                subtotal += total;
-                
-                const itemElement = document.createElement('div');
-                itemElement.className = 'checkout-item';
-                itemElement.innerHTML = `
-                    <div class="item-details">
-                        <h3>${product.name}</h3>
-                        <p>Quantity: ${item.quantity}</p>
-                    </div>
-                    <div class="item-price">$${total.toFixed(2)}</div>
-                `;
-                
-                checkoutItems.appendChild(itemElement);
-            }
-        });
-        
-        // Update totals
-        const shipping = 5.00;
-        const total = subtotal + shipping;
-        
-        document.getElementById('checkout-subtotal').textContent = `$${subtotal.toFixed(2)}`;
-        document.getElementById('checkout-total').textContent = `$${total.toFixed(2)}`;
-    }
-});
-</script>
-
 <style>
 .checkout-container {
     display: flex;
     flex-wrap: wrap;
     gap: 30px;
     margin: 30px 0;
+}
+
+.error-message {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 10px 15px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    border: 1px solid #f5c6cb;
 }
 
 .checkout-form-container {
@@ -259,13 +281,17 @@ h2 {
 }
 
 .order-success h1 {
-    color: #4CAF50;
+    color: #28a745;
     margin-bottom: 20px;
 }
 
 .order-success p {
     font-size: 1.2rem;
     margin-bottom: 30px;
+}
+
+.order-success .btn {
+    margin: 0 10px;
 }
 </style>
 

@@ -1,5 +1,8 @@
 <?php
 session_start();
+require_once 'models/Order.php';
+require_once 'models/Product.php';
+require_once 'database/db.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
@@ -8,41 +11,53 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// For first iteration, we'll use hardcoded order data
-// In a real application, this would come from a database
-$orders = [
-    [
-        'id' => 1001,
-        'date' => '2023-05-01',
-        'status' => 'Delivered',
-        'total' => 1149.98,
-        'items' => [
-            [
-                'product_id' => 1,
-                'quantity' => 1,
-                'price' => 899.99
-            ],
-            [
-                'product_id' => 6,
-                'quantity' => 2,
-                'price' => 129.99
-            ]
-        ]
-    ],
-    [
-        'id' => 1002,
-        'date' => '2023-05-15',
-        'status' => 'Processing',
-        'total' => 499.99,
-        'items' => [
-            [
-                'product_id' => 8,
-                'quantity' => 1,
-                'price' => 499.99
-            ]
-        ]
-    ]
-];
+// Get user ID
+$user_id = $_SESSION['user_id'];
+
+// Initialize database and models
+$db = Database::getInstance();
+$orderModel = new Order();
+$productModel = new Product();
+
+// Get order history directly with a simple query
+try {
+    $conn = $db->getConnection();
+    $query = "SELECT id, created_at, status, total, user_id 
+              FROM orders 
+              WHERE user_id = ? 
+              ORDER BY created_at DESC";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    $orders = [];
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $orders[] = $row;
+        }
+    }
+} catch (Exception $e) {
+    error_log("Error loading order history: " . $e->getMessage());
+    $orders = [];
+}
+
+// Get product details for all products to use in JavaScript
+try {
+    $allProducts = $productModel->getAllProducts();
+    $productsForJS = [];
+    foreach ($allProducts as $product) {
+        $productsForJS[$product['id']] = [
+            'id' => $product['id'],
+            'name' => $product['name'],
+            'image' => $product['image'],
+            'price' => $product['price']
+        ];
+    }
+} catch (Exception $e) {
+    error_log("Error loading products: " . $e->getMessage());
+    $productsForJS = [];
+}
 
 // Include header
 include 'includes/header.php';
@@ -63,15 +78,61 @@ include 'includes/header.php';
                     <div class="order-header">
                         <div>
                             <h3>Order #<?php echo $order['id']; ?></h3>
-                            <p>Placed on <?php echo $order['date']; ?></p>
+                            <p>Placed on <?php echo date('Y-m-d', strtotime($order['created_at'])); ?></p>
                         </div>
                         <div class="order-status <?php echo strtolower($order['status']); ?>">
-                            <?php echo $order['status']; ?>
+                            <?php echo ucfirst($order['status']); ?>
                         </div>
                     </div>
                     
                     <div class="order-items" id="order-items-<?php echo $order['id']; ?>">
-                        <!-- Order items will be loaded here by JavaScript -->
+                        <!-- Order items loaded directly with a simple query -->
+                        <?php 
+                        try {
+                            // Get order items directly
+                            $query = "SELECT oi.*, p.name, p.image 
+                                    FROM order_items oi 
+                                    JOIN products p ON oi.product_id = p.id 
+                                    WHERE oi.order_id = ?";
+                            $stmt = $conn->prepare($query);
+                            $stmt->bind_param("i", $order['id']);
+                            $stmt->execute();
+                            $itemsResult = $stmt->get_result();
+                            
+                            $items = [];
+                            if ($itemsResult) {
+                                while ($row = $itemsResult->fetch_assoc()) {
+                                    $items[] = $row;
+                                }
+                            }
+                            
+                            if (!empty($items)) {
+                                // Display up to 2 items in the summary
+                                $displayItems = array_slice($items, 0, 2);
+                                foreach ($displayItems as $item) {
+                                    ?>
+                                    <div class="order-item">
+                                        <img src="<?php echo htmlspecialchars($item['image']); ?>" alt="<?php echo htmlspecialchars($item['name']); ?>" class="order-item-image">
+                                        <div class="order-item-details">
+                                            <h4><?php echo htmlspecialchars($item['name']); ?></h4>
+                                            <p>Qty: <?php echo $item['quantity']; ?> × $<?php echo number_format($item['price'], 2); ?></p>
+                                        </div>
+                                    </div>
+                                    <?php
+                                }
+                                
+                                // Show "and X more items" if there are more than 2 items
+                                if (count($items) > 2) {
+                                    echo '<div class="more-items">and ' . (count($items) - 2) . ' more item(s)</div>';
+                                }
+                            } else {
+                                echo '<div>No items found for this order</div>';
+                            }
+                        } catch (Exception $e) {
+                            error_log("Error loading order details for order #" . $order['id'] . ": " . $e->getMessage());
+                            echo '<div class="error-message">Could not load order items</div>';
+                        }
+                        ?>
                     </div>
                     
                     <div class="order-footer">
@@ -98,42 +159,8 @@ include 'includes/header.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Sample orders data (would normally come from PHP)
-    const orders = <?php echo json_encode($orders); ?>;
-    
-    // Render order items for each order
-    orders.forEach(order => {
-        const orderItemsContainer = document.getElementById(`order-items-${order.id}`);
-        if (!orderItemsContainer) return;
-        
-        // Display only the first 2 items in the summary view
-        const displayItems = order.items.slice(0, 2);
-        
-        displayItems.forEach(item => {
-            const product = products.find(p => p.id === item.product_id);
-            if (!product) return;
-            
-            const itemElement = document.createElement('div');
-            itemElement.className = 'order-item';
-            itemElement.innerHTML = `
-                <img src="${product.image}" alt="${product.name}" class="order-item-image">
-                <div class="order-item-details">
-                    <h4>${product.name}</h4>
-                    <p>Qty: ${item.quantity} × $${item.price.toFixed(2)}</p>
-                </div>
-            `;
-            
-            orderItemsContainer.appendChild(itemElement);
-        });
-        
-        // Show "and X more items" if there are more than 2 items
-        if (order.items.length > 2) {
-            const moreElement = document.createElement('div');
-            moreElement.className = 'more-items';
-            moreElement.textContent = `and ${order.items.length - 2} more item(s)`;
-            orderItemsContainer.appendChild(moreElement);
-        }
-    });
+    // Get products data
+    const products = <?php echo json_encode($productsForJS); ?>;
     
     // Modal functionality
     const modal = document.getElementById('order-modal');
@@ -158,49 +185,62 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             
             const orderId = parseInt(this.dataset.orderId);
-            const order = orders.find(o => o.id === orderId);
             
-            if (order) {
-                // Build modal content
-                let modalHTML = `
-                    <div class="order-info">
-                        <p><strong>Order ID:</strong> #${order.id}</p>
-                        <p><strong>Date:</strong> ${order.date}</p>
-                        <p><strong>Status:</strong> <span class="status ${order.status.toLowerCase()}">${order.status}</span></p>
-                    </div>
-                    <h3>Items</h3>
-                    <div class="modal-items">
-                `;
-                
-                // Add all items to the modal
-                order.items.forEach(item => {
-                    const product = products.find(p => p.id === item.product_id);
-                    if (!product) return;
-                    
-                    modalHTML += `
-                        <div class="modal-item">
-                            <img src="${product.image}" alt="${product.name}" class="modal-item-image">
-                            <div class="modal-item-details">
-                                <h4>${product.name}</h4>
-                                <p>Quantity: ${item.quantity}</p>
-                                <p>Price: $${item.price.toFixed(2)}</p>
-                                <p>Subtotal: $${(item.price * item.quantity).toFixed(2)}</p>
+            // Fetch order details via AJAX
+            fetch(`get_order_details.php?id=${orderId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const order = data.order;
+                        const items = data.items;
+                        
+                        // Build modal content
+                        let modalHTML = `
+                            <div class="order-info">
+                                <p><strong>Order ID:</strong> #${order.id}</p>
+                                <p><strong>Date:</strong> ${new Date(order.created_at).toLocaleDateString()}</p>
+                                <p><strong>Status:</strong> <span class="status ${order.status.toLowerCase()}">${order.status}</span></p>
                             </div>
-                        </div>
-                    `;
+                            <h3>Items</h3>
+                            <div class="modal-items">
+                        `;
+                        
+                        // Add all items to the modal
+                        items.forEach(item => {
+                            const product = products[item.product_id];
+                            if (!product) return;
+                            
+                            modalHTML += `
+                                <div class="modal-item">
+                                    <img src="${item.image || product.image}" alt="${item.name || product.name}" class="modal-item-image">
+                                    <div class="modal-item-details">
+                                        <h4>${item.name || product.name}</h4>
+                                        <p>Quantity: ${item.quantity}</p>
+                                        <p>Price: $${parseFloat(item.price).toFixed(2)}</p>
+                                        <p>Subtotal: $${(parseFloat(item.price) * item.quantity).toFixed(2)}</p>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        modalHTML += `
+                            </div>
+                            <div class="modal-total">
+                                <p><strong>Total:</strong> $${parseFloat(order.total).toFixed(2)}</p>
+                            </div>
+                        `;
+                        
+                        // Update modal content and display it
+                        modalContent.innerHTML = modalHTML;
+                        modal.style.display = 'block';
+                    } else {
+                        alert('Could not load order details.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching order details:', error);
+                    alert('Error loading order details.');
                 });
-                
-                modalHTML += `
-                    </div>
-                    <div class="modal-total">
-                        <p><strong>Total:</strong> $${order.total.toFixed(2)}</p>
-                    </div>
-                `;
-                
-                // Update modal content and display it
-                modalContent.innerHTML = modalHTML;
-                modal.style.display = 'block';
-            }
         });
     });
 });
@@ -296,6 +336,14 @@ document.addEventListener('DOMContentLoaded', function() {
 .empty-orders {
     text-align: center;
     padding: 50px 0;
+}
+
+.error-message {
+    background-color: #f8d7da;
+    color: #721c24;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 0.9em;
 }
 
 /* Modal Styles */
