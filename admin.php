@@ -28,6 +28,59 @@ $error = '';
 // Determine which tab is active
 $active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'products';
 
+// Handle processing orders
+if (isset($_GET['process']) && is_numeric($_GET['process'])) {
+    $order_id = (int)$_GET['process'];
+    if ($orderModel->updateOrderStatus($order_id, 'shipped')) {
+        $success = "Order #$order_id has been processed and marked as shipped.";
+        // Refresh orders list
+        $orders = $orderModel->getAllOrders();
+    } else {
+        $error = "Failed to process order #$order_id.";
+    }
+}
+
+// Handle deleting products
+if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
+    $product_id = (int)$_GET['delete'];
+    if ($productModel->deleteProduct($product_id)) {
+        $success = "Product #$product_id has been deleted.";
+        // Refresh product list
+        $products = $productModel->getAllProducts();
+    } else {
+        $error = "Failed to delete product #$product_id.";
+    }
+}
+
+// Handle AJAX requests
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
+    header('Content-Type: application/json');
+    
+    if (isset($_GET['process_order']) && is_numeric($_GET['process_order'])) {
+        $order_id = (int)$_GET['process_order'];
+        $result = $orderModel->updateOrderStatus($order_id, 'shipped');
+        
+        if ($result) {
+            echo json_encode(['success' => true, 'message' => "Order #$order_id has been processed and marked as shipped."]);
+        } else {
+            echo json_encode(['success' => false, 'message' => "Failed to process order #$order_id."]);
+        }
+        exit;
+    }
+    
+    if (isset($_GET['delete_product']) && is_numeric($_GET['delete_product'])) {
+        $product_id = (int)$_GET['delete_product'];
+        $result = $productModel->deleteProduct($product_id);
+        
+        if ($result) {
+            echo json_encode(['success' => true, 'message' => "Product #$product_id has been deleted."]);
+        } else {
+            echo json_encode(['success' => false, 'message' => "Failed to delete product #$product_id."]);
+        }
+        exit;
+    }
+}
+
 // Handle form submission to add new product
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_product'])) {
     $name = $_POST['product_name'] ?? '';
@@ -292,6 +345,77 @@ document.addEventListener('DOMContentLoaded', function() {
             productFormContainer.style.display = 'none';
         });
     }
+    
+    // Handle processing orders via AJAX
+    const processButtons = document.querySelectorAll('.btn-process');
+    processButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            if (confirm('Process this order?')) {
+                const orderId = this.getAttribute('href').split('process=')[1];
+                
+                // Send AJAX request to process the order
+                fetch(`admin.php?ajax=true&process_order=${orderId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Update the UI - change status to "Shipped"
+                            const statusElement = this.closest('tr').querySelector('.order-status');
+                            statusElement.className = 'order-status status-shipped';
+                            statusElement.textContent = 'Shipped';
+                            
+                            // Show success message
+                            alert(data.message);
+                            
+                            // Disable the Process button
+                            this.style.display = 'none';
+                        } else {
+                            alert(data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while processing the order.');
+                    });
+            }
+            
+            return false;
+        });
+    });
+    
+    // Handle deleting products via AJAX
+    const deleteButtons = document.querySelectorAll('.btn-delete');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            if (confirm('Are you sure you want to delete this product?')) {
+                const productId = this.getAttribute('href').split('delete=')[1];
+                
+                // Send AJAX request to delete the product
+                fetch(`admin.php?ajax=true&delete_product=${productId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Remove the row from the table
+                            this.closest('tr').remove();
+                            
+                            // Show success message
+                            alert(data.message);
+                        } else {
+                            alert(data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while deleting the product.');
+                    });
+            }
+            
+            return false;
+        });
+    });
 });
 </script>
 
