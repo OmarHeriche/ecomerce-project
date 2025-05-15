@@ -5,7 +5,7 @@ const products = [
         name: "Smartphone X Pro",
         description: "The latest smartphone with advanced camera and long battery life.",
         price: 899.99,
-        image: "images/products/smartphone.jpg",
+        image: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?q=80&w=500&auto=format&fit=crop",
         category: "smartphones",
         featured: true,
         stock: 15
@@ -15,7 +15,7 @@ const products = [
         name: "Laptop UltraBook",
         description: "Thin and light laptop with powerful performance for professionals.",
         price: 1299.99,
-        image: "images/products/laptop.jpg",
+        image: "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?q=80&w=500&auto=format&fit=crop",
         category: "laptops",
         featured: true,
         stock: 10
@@ -25,7 +25,7 @@ const products = [
         name: "Wireless Headphones",
         description: "Premium noise-cancelling headphones with crystal clear sound.",
         price: 249.99,
-        image: "images/products/headphones.jpg",
+        image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=500&auto=format&fit=crop",
         category: "audio",
         featured: true,
         stock: 20
@@ -35,7 +35,7 @@ const products = [
         name: "Smart Watch",
         description: "Track your fitness and stay connected with this feature-packed smartwatch.",
         price: 199.99,
-        image: "images/products/smartwatch.jpg",
+        image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=500&auto=format&fit=crop",
         category: "wearables",
         featured: true,
         stock: 18
@@ -45,7 +45,7 @@ const products = [
         name: "4K Smart TV",
         description: "Ultra HD smart TV with stunning picture quality and smart features.",
         price: 799.99,
-        image: "images/products/tv.jpg",
+        image: "https://images.unsplash.com/photo-1593305841991-05c297ba4575?q=80&w=500&auto=format&fit=crop",
         category: "tvs",
         featured: false,
         stock: 8
@@ -55,7 +55,7 @@ const products = [
         name: "Wireless Earbuds",
         description: "Compact earbuds with great sound quality and long battery life.",
         price: 129.99,
-        image: "images/products/earbuds.jpg",
+        image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?q=80&w=500&auto=format&fit=crop",
         category: "audio",
         featured: true,
         stock: 25
@@ -65,7 +65,7 @@ const products = [
         name: "Digital Camera",
         description: "Professional-grade camera for stunning photos and videos.",
         price: 699.99,
-        image: "images/products/camera.jpg",
+        image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=500&auto=format&fit=crop",
         category: "cameras",
         featured: false,
         stock: 12
@@ -75,7 +75,7 @@ const products = [
         name: "Gaming Console",
         description: "Next-generation gaming with incredible graphics and performance.",
         price: 499.99,
-        image: "images/products/console.jpg",
+        image: "https://images.unsplash.com/photo-1607853202273-797f1c22a38e?q=80&w=500&auto=format&fit=crop",
         category: "gaming",
         featured: true,
         stock: 7

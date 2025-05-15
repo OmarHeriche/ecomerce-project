@@ -8,7 +8,7 @@
 body {
     font-family: 'Arial', sans-serif;
     line-height: 1.6;
-    color: #333;
+    /* Color is now set by theme variables in header */
 }
 
 .container {
@@ -19,7 +19,7 @@ body {
 
 a {
     text-decoration: none;
-    color: #333;
+    /* Color is now set by theme variables in header */
 }
 
 ul {
@@ -28,7 +28,7 @@ ul {
 
 .btn {
     display: inline-block;
-    background: #4CAF50;
+    background: var(--primary-color);
     color: white;
     padding: 10px 20px;
     border: none;
@@ -38,12 +38,12 @@ ul {
 }
 
 .btn:hover {
-    background: #45a049;
+    background: #3a80d2; /* Slightly darker than primary-color */
 }
 
 /* Header styles */
 header {
-    background-color: #fff;
+    /* Background color is now set by theme variables in header */
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     padding: 15px 0;
     position: sticky;
@@ -60,15 +60,24 @@ header .container {
 .logo a {
     font-size: 1.8rem;
     font-weight: bold;
-    color: #4CAF50;
+    color: var(--primary-color);
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
 }
 
 nav ul {
     display: flex;
+    flex-wrap: wrap;
 }
 
 nav ul li {
     margin-left: 20px;
+    margin-bottom: 5px;
 }
 
 nav ul li a {
@@ -77,20 +86,10 @@ nav ul li a {
 }
 
 nav ul li a:hover {
-    color: #4CAF50;
+    color: var(--primary-color);
 }
 
-.user-actions {
-    display: flex;
-    align-items: center;
-}
-
-.user-actions a {
-    margin-left: 15px;
-    font-weight: 500;
-}
-
-.btn-cart {
+.cart-icon {
     position: relative;
 }
 
@@ -98,7 +97,7 @@ nav ul li a:hover {
     position: absolute;
     top: -8px;
     right: -8px;
-    background: #4CAF50;
+    background: var(--primary-color);
     color: white;
     border-radius: 50%;
     width: 20px;
@@ -111,7 +110,7 @@ nav ul li a:hover {
 
 /* Hero section */
 .hero-section {
-    background-image: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('../images/hero-bg.jpg');
+    background-image: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('https://images.unsplash.com/photo-1498049794561-7780e7231661?q=80&w=1200&auto=format&fit=crop');
     background-size: cover;
     background-position: center;
     color: white;
@@ -148,7 +147,7 @@ nav ul li a:hover {
 }
 
 .product-card {
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
     overflow: hidden;
     transition: transform 0.3s, box-shadow 0.3s;
@@ -176,7 +175,7 @@ nav ul li a:hover {
 
 .product-price {
     font-weight: bold;
-    color: #4CAF50;
+    color: var(--primary-color);
     margin-bottom: 10px;
 }
 
@@ -187,9 +186,11 @@ nav ul li a:hover {
 
 /* Footer styles */
 footer {
-    background: #333;
-    color: white;
+    background: var(--secondary-bg);
+    color: var(--text-color);
     padding: 40px 0 20px;
+    margin-top: 40px;
+    border-top: 1px solid var(--border-color);
 }
 
 .footer-content {

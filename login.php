@@ -8,6 +8,49 @@ if (isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Check if there's a remember me cookie
+if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_user'])) {
+    // For first iteration, we'll use hardcoded users
+    $users = [
+        [
+            'id' => 1,
+            'email' => 'user@example.com',
+            'password' => 'password123', // In a real app, this would be hashed
+            'name' => 'John Doe',
+            'is_admin' => false
+        ],
+        [
+            'id' => 2,
+            'email' => 'admin@example.com',
+            'password' => 'admin123', // In a real app, this would be hashed
+            'name' => 'Admin User',
+            'is_admin' => true
+        ]
+    ];
+    
+    $remembered_id = $_COOKIE['remember_user'];
+    
+    // Find user by ID
+    $remembered_user = null;
+    foreach ($users as $u) {
+        if ($u['id'] == $remembered_id) {
+            $remembered_user = $u;
+            break;
+        }
+    }
+    
+    if ($remembered_user) {
+        // Set session variables
+        $_SESSION['user_id'] = $remembered_user['id'];
+        $_SESSION['user_name'] = $remembered_user['name'];
+        $_SESSION['is_admin'] = $remembered_user['is_admin'];
+        
+        // Redirect to home page
+        header('Location: index.php');
+        exit;
+    }
+}
+
 // Initialize error message
 $error = '';
 
@@ -33,6 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     $email = $_POST['email'] ?? '';
     $password = $_POST['password'] ?? '';
+    $remember = isset($_POST['remember']) ? true : false;
     
     // Simple validation
     if (empty($email) || empty($password)) {
@@ -52,6 +96,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
             $_SESSION['is_admin'] = $user['is_admin'];
+            
+            // Set remember me cookie if requested
+            if ($remember) {
+                setcookie('remember_user', $user['id'], time() + (86400 * 30), "/"); // 30 days
+            }
             
             // Redirect to home page
             header('Location: index.php');
@@ -83,6 +132,11 @@ include 'includes/header.php';
             <div class="form-group">
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required>
+            </div>
+            
+            <div class="form-group remember-me">
+                <input type="checkbox" id="remember" name="remember">
+                <label for="remember">Remember me</label>
             </div>
             
             <button type="submit" class="btn">Login</button>
@@ -119,11 +173,26 @@ include 'includes/header.php';
         font-weight: bold;
     }
     
-    .auth-form input {
+    .auth-form input[type="email"],
+    .auth-form input[type="password"] {
         width: 100%;
         padding: 10px;
         border: 1px solid #ddd;
         border-radius: 5px;
+    }
+    
+    .remember-me {
+        display: flex;
+        align-items: center;
+    }
+    
+    .remember-me input {
+        margin-right: 5px;
+    }
+    
+    .remember-me label {
+        display: inline;
+        margin-bottom: 0;
     }
     
     .auth-form button {
