@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once 'models/User.php';
 
 // Check if user is already logged in
 if (isset($_SESSION['user_id'])) {
@@ -8,36 +9,13 @@ if (isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Initialize User model
+$userModel = new User();
+
 // Check if there's a remember me cookie
 if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_user'])) {
-    // For first iteration, we'll use hardcoded users
-    $users = [
-        [
-            'id' => 1,
-            'email' => 'user@example.com',
-            'password' => 'password123', // In a real app, this would be hashed
-            'name' => 'John Doe',
-            'is_admin' => false
-        ],
-        [
-            'id' => 2,
-            'email' => 'admin@example.com',
-            'password' => 'admin123', // In a real app, this would be hashed
-            'name' => 'Admin User',
-            'is_admin' => true
-        ]
-    ];
-    
     $remembered_id = $_COOKIE['remember_user'];
-    
-    // Find user by ID
-    $remembered_user = null;
-    foreach ($users as $u) {
-        if ($u['id'] == $remembered_id) {
-            $remembered_user = $u;
-            break;
-        }
-    }
+    $remembered_user = $userModel->getUserById($remembered_id);
     
     if ($remembered_user) {
         // Set session variables
@@ -56,24 +34,6 @@ $error = '';
 
 // Check if form is submitted
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // For first iteration, we'll use hardcoded users
-    $users = [
-        [
-            'id' => 1,
-            'email' => 'user@example.com',
-            'password' => 'password123', // In a real app, this would be hashed
-            'name' => 'John Doe',
-            'is_admin' => false
-        ],
-        [
-            'id' => 2,
-            'email' => 'admin@example.com',
-            'password' => 'admin123', // In a real app, this would be hashed
-            'name' => 'Admin User',
-            'is_admin' => true
-        ]
-    ];
-    
     $email = $_POST['email'] ?? '';
     $password = $_POST['password'] ?? '';
     $remember = isset($_POST['remember']) ? true : false;
@@ -82,31 +42,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($email) || empty($password)) {
         $error = 'Please enter both email and password.';
     } else {
-        // Check if user exists
-        $user = null;
-        foreach ($users as $u) {
-            if ($u['email'] === $email && $u['password'] === $password) {
-                $user = $u;
-                break;
-            }
-        }
+        // Attempt login
+        $result = $userModel->login($email, $password);
         
-        if ($user) {
-            // Set session variables
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['user_name'] = $user['name'];
-            $_SESSION['is_admin'] = $user['is_admin'];
-            
+        if ($result['success']) {
             // Set remember me cookie if requested
             if ($remember) {
-                setcookie('remember_user', $user['id'], time() + (86400 * 30), "/"); // 30 days
+                setcookie('remember_user', $_SESSION['user_id'], time() + (86400 * 30), "/"); // 30 days
             }
             
             // Redirect to home page
             header('Location: index.php');
             exit;
         } else {
-            $error = 'Invalid email or password.';
+            $error = $result['message'];
         }
     }
 }

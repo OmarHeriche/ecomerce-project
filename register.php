@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once 'models/User.php';
 
 // Check if user is already logged in
 if (isset($_SESSION['user_id'])) {
@@ -8,7 +9,10 @@ if (isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Initialize error message
+// Initialize User model
+$userModel = new User();
+
+// Initialize error and success messages
 $error = '';
 $success = '';
 
@@ -17,19 +21,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = $_POST['name'] ?? '';
     $email = $_POST['email'] ?? '';
     $password = $_POST['password'] ?? '';
-    $confirmPassword = $_POST['confirm_password'] ?? '';
+    $confirm_password = $_POST['confirm_password'] ?? '';
     
     // Simple validation
-    if (empty($name) || empty($email) || empty($password) || empty($confirmPassword)) {
+    if (empty($name) || empty($email) || empty($password) || empty($confirm_password)) {
         $error = 'Please fill in all fields.';
-    } elseif ($password !== $confirmPassword) {
+    } elseif ($password !== $confirm_password) {
         $error = 'Passwords do not match.';
     } elseif (strlen($password) < 8) {
-        $error = 'Password must be at least 8 characters.';
+        $error = 'Password must be at least 8 characters long.';
     } else {
-        // In a real app, we would save the user to a database
-        // For now, just show a success message
-        $success = 'Registration successful! You can now log in.';
+        // Attempt registration
+        $result = $userModel->register($name, $email, $password);
+        
+        if ($result['success']) {
+            $success = 'Registration successful! You can now login.';
+            
+            // Optionally auto-login the user
+            // $_SESSION['user_id'] = $result['user_id'];
+            // $_SESSION['user_name'] = $name;
+            // $_SESSION['is_admin'] = 0;
+            // header('Location: index.php');
+            // exit;
+        } else {
+            $error = $result['message'];
+        }
     }
 }
 
@@ -52,22 +68,22 @@ include 'includes/header.php';
         <form action="register.php" method="post" class="auth-form">
             <div class="form-group">
                 <label for="name">Full Name</label>
-                <input type="text" id="name" name="name" required>
+                <input type="text" id="name" name="name" value="<?php echo isset($_POST['name']) ? htmlspecialchars($_POST['name']) : ''; ?>" required>
             </div>
             
             <div class="form-group">
                 <label for="email">Email</label>
-                <input type="email" id="email" name="email" required>
+                <input type="email" id="email" name="email" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>" required>
             </div>
             
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" required minlength="8">
+                <input type="password" id="password" name="password" required>
             </div>
             
             <div class="form-group">
                 <label for="confirm_password">Confirm Password</label>
-                <input type="password" id="confirm_password" name="confirm_password" required minlength="8">
+                <input type="password" id="confirm_password" name="confirm_password" required>
             </div>
             
             <button type="submit" class="btn">Register</button>
@@ -104,7 +120,9 @@ include 'includes/header.php';
         font-weight: bold;
     }
     
-    .auth-form input {
+    .auth-form input[type="text"],
+    .auth-form input[type="email"],
+    .auth-form input[type="password"] {
         width: 100%;
         padding: 10px;
         border: 1px solid #ddd;

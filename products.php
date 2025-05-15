@@ -1,5 +1,61 @@
 <?php
 session_start();
+require_once 'models/Product.php';
+
+// Initialize Product model
+$productModel = new Product();
+
+// Handle filters
+$category = isset($_GET['category']) ? $_GET['category'] : 'all';
+$search = isset($_GET['search']) ? $_GET['search'] : '';
+$sort = isset($_GET['sort']) ? $_GET['sort'] : 'default';
+
+// Get products based on filters
+if ($category !== 'all' && !empty($search)) {
+    // Both category and search
+    $products = $productModel->getProductsByCategory($category);
+    // Filter further by search
+    $products = array_filter($products, function($product) use ($search) {
+        return (stripos($product['name'], $search) !== false || 
+                stripos($product['description'], $search) !== false);
+    });
+} elseif ($category !== 'all') {
+    // Only category filter
+    $products = $productModel->getProductsByCategory($category);
+} elseif (!empty($search)) {
+    // Only search filter
+    $products = $productModel->searchProducts($search);
+} else {
+    // No filters
+    $products = $productModel->getAllProducts();
+}
+
+// Apply sorting
+if (!empty($products)) {
+    switch($sort) {
+        case 'price-low':
+            usort($products, function($a, $b) {
+                return $a['price'] - $b['price'];
+            });
+            break;
+        case 'price-high':
+            usort($products, function($a, $b) {
+                return $b['price'] - $a['price'];
+            });
+            break;
+        case 'name-asc':
+            usort($products, function($a, $b) {
+                return strcmp($a['name'], $b['name']);
+            });
+            break;
+        case 'name-desc':
+            usort($products, function($a, $b) {
+                return strcmp($b['name'], $a['name']);
+            });
+            break;
+        // default - no sorting needed
+    }
+}
 
 // Include header
 include 'includes/header.php';
@@ -8,129 +64,88 @@ include 'includes/header.php';
 <main class="container">
     <div class="products-header">
         <h1>All Products</h1>
-        <div class="filters">
+        <form action="products.php" method="get" class="filters">
             <div class="filter-group">
                 <label for="category-filter">Category:</label>
-                <select id="category-filter">
-                    <option value="all">All Categories</option>
-                    <option value="smartphones">Smartphones</option>
-                    <option value="laptops">Laptops</option>
-                    <option value="audio">Audio</option>
-                    <option value="wearables">Wearables</option>
-                    <option value="tvs">TVs</option>
-                    <option value="cameras">Cameras</option>
-                    <option value="gaming">Gaming</option>
+                <select id="category-filter" name="category">
+                    <option value="all" <?php echo $category === 'all' ? 'selected' : ''; ?>>All Categories</option>
+                    <option value="smartphones" <?php echo $category === 'smartphones' ? 'selected' : ''; ?>>Smartphones</option>
+                    <option value="laptops" <?php echo $category === 'laptops' ? 'selected' : ''; ?>>Laptops</option>
+                    <option value="audio" <?php echo $category === 'audio' ? 'selected' : ''; ?>>Audio</option>
+                    <option value="wearables" <?php echo $category === 'wearables' ? 'selected' : ''; ?>>Wearables</option>
+                    <option value="tvs" <?php echo $category === 'tvs' ? 'selected' : ''; ?>>TVs</option>
+                    <option value="cameras" <?php echo $category === 'cameras' ? 'selected' : ''; ?>>Cameras</option>
+                    <option value="gaming" <?php echo $category === 'gaming' ? 'selected' : ''; ?>>Gaming</option>
                 </select>
             </div>
             <div class="filter-group">
                 <label for="sort-filter">Sort By:</label>
-                <select id="sort-filter">
-                    <option value="default">Default</option>
-                    <option value="price-low">Price: Low to High</option>
-                    <option value="price-high">Price: High to Low</option>
-                    <option value="name-asc">Name: A to Z</option>
-                    <option value="name-desc">Name: Z to A</option>
+                <select id="sort-filter" name="sort">
+                    <option value="default" <?php echo $sort === 'default' ? 'selected' : ''; ?>>Default</option>
+                    <option value="price-low" <?php echo $sort === 'price-low' ? 'selected' : ''; ?>>Price: Low to High</option>
+                    <option value="price-high" <?php echo $sort === 'price-high' ? 'selected' : ''; ?>>Price: High to Low</option>
+                    <option value="name-asc" <?php echo $sort === 'name-asc' ? 'selected' : ''; ?>>Name: A to Z</option>
+                    <option value="name-desc" <?php echo $sort === 'name-desc' ? 'selected' : ''; ?>>Name: Z to A</option>
                 </select>
             </div>
             <div class="filter-group">
-                <input type="text" id="search-filter" placeholder="Search products...">
-                <button id="search-btn">Search</button>
+                <input type="text" id="search-filter" name="search" placeholder="Search products..." value="<?php echo htmlspecialchars($search); ?>">
+                <button type="submit" id="search-btn" class="btn">Search</button>
             </div>
-        </div>
+        </form>
     </div>
     
-    <div class="products-grid" id="products-container">
-        <!-- Products will be loaded here by JavaScript -->
+    <div class="products-grid">
+        <?php if (empty($products)): ?>
+            <p class="no-products">No products found matching your criteria.</p>
+        <?php else: ?>
+            <?php foreach ($products as $product): ?>
+                <div class="product-card">
+                    <img src="<?php echo htmlspecialchars($product['image']); ?>" alt="<?php echo htmlspecialchars($product['name']); ?>" class="product-image">
+                    <div class="product-info">
+                        <h3 class="product-title"><?php echo htmlspecialchars($product['name']); ?></h3>
+                        <p class="product-price">$<?php echo number_format($product['price'], 2); ?></p>
+                        <a href="product-details.php?id=<?php echo $product['id']; ?>" class="btn">View Details</a>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
     </div>
 </main>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Display all products
-        const productsContainer = document.getElementById('products-container');
-        
-        // Render all products initially
-        renderProducts(products);
-        
-        // Event listeners for filters
-        document.getElementById('category-filter').addEventListener('change', applyFilters);
-        document.getElementById('sort-filter').addEventListener('change', applyFilters);
-        document.getElementById('search-btn').addEventListener('click', applyFilters);
-        document.getElementById('search-filter').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                applyFilters();
-            }
-        });
-        
-        // Function to render products
-        function renderProducts(productsToRender) {
-            productsContainer.innerHTML = '';
-            
-            if (productsToRender.length === 0) {
-                productsContainer.innerHTML = '<p class="no-products">No products found matching your criteria</p>';
-                return;
-            }
-            
-            productsToRender.forEach(product => {
-                const productCard = document.createElement('div');
-                productCard.className = 'product-card';
-                
-                productCard.innerHTML = `
-                    <img src="${product.image}" alt="${product.name}" class="product-image">
-                    <div class="product-info">
-                        <h3 class="product-title">${product.name}</h3>
-                        <p class="product-price">$${product.price.toFixed(2)}</p>
-                        <a href="product-details.php?id=${product.id}" class="btn">View Details</a>
-                    </div>
-                `;
-                
-                productsContainer.appendChild(productCard);
-            });
-        }
-        
-        // Function to apply filters
-        function applyFilters() {
-            const category = document.getElementById('category-filter').value;
-            const sort = document.getElementById('sort-filter').value;
-            const search = document.getElementById('search-filter').value.toLowerCase();
-            
-            // Filter products
-            let filteredProducts = [...products];
-            
-            // Apply category filter
-            if (category !== 'all') {
-                filteredProducts = filteredProducts.filter(product => product.category === category);
-            }
-            
-            // Apply search filter
-            if (search) {
-                filteredProducts = filteredProducts.filter(product => 
-                    product.name.toLowerCase().includes(search) || 
-                    product.description.toLowerCase().includes(search)
-                );
-            }
-            
-            // Apply sort
-            switch(sort) {
-                case 'price-low':
-                    filteredProducts.sort((a, b) => a.price - b.price);
-                    break;
-                case 'price-high':
-                    filteredProducts.sort((a, b) => b.price - a.price);
-                    break;
-                case 'name-asc':
-                    filteredProducts.sort((a, b) => a.name.localeCompare(b.name));
-                    break;
-                case 'name-desc':
-                    filteredProducts.sort((a, b) => b.name.localeCompare(a.name));
-                    break;
-            }
-            
-            // Render filtered products
-            renderProducts(filteredProducts);
-        }
-    });
-</script>
+<style>
+    .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+    
+    .filter-group {
+        flex: 1;
+        min-width: 200px;
+    }
+    
+    .filter-group select, 
+    .filter-group input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+    }
+    
+    #search-btn {
+        width: 100%;
+        margin-top: 5px;
+    }
+    
+    .no-products {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 50px;
+        color: #666;
+    }
+</style>
 
 <?php
 // Include footer
