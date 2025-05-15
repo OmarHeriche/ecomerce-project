@@ -81,6 +81,39 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'true') {
     }
 }
 
+// Handle editing products - get product data to populate the form
+$editing_product = null;
+if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
+    $product_id = (int)$_GET['edit'];
+    $editing_product = $productModel->getProductById($product_id);
+    if (!$editing_product) {
+        $error = "Product #$product_id not found.";
+    }
+}
+
+// Handle form submission to update product
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
+    $product_id = $_POST['product_id'] ?? 0;
+    $name = $_POST['product_name'] ?? '';
+    $description = $_POST['product_description'] ?? '';
+    $price = $_POST['product_price'] ?? 0;
+    $category = $_POST['product_category'] ?? '';
+    $stock = $_POST['product_stock'] ?? 0;
+    $featured = isset($_POST['product_featured']) ? 1 : 0;
+    $image = $_POST['product_image'] ?? '';
+    
+    // Update product in database
+    $result = $productModel->updateProduct($product_id, $name, $description, $price, $image, $category, $featured, $stock);
+    
+    if ($result) {
+        $success = 'Product updated successfully!';
+        // Refresh product list
+        $products = $productModel->getAllProducts();
+    } else {
+        $error = 'Failed to update product.';
+    }
+}
+
 // Handle form submission to add new product
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_product'])) {
     $name = $_POST['product_name'] ?? '';
@@ -143,28 +176,32 @@ include 'includes/header.php';
                     <div class="error-message"><?php echo $error; ?></div>
                 <?php endif; ?>
                 
-                <div class="product-form-container" id="product-form-container" style="display: none;">
-                    <h3>Add New Product</h3>
-                    <form action="admin.php?tab=products" method="post" class="product-form">
+                <div class="product-form-container" id="product-form-container" style="display: <?php echo $editing_product ? 'block' : 'none'; ?>;">
+                    <h3><?php echo $editing_product ? 'Edit Product' : 'Add New Product'; ?></h3>
+                    <form action="admin.php?tab=products<?php echo $editing_product ? '&edit=' . $editing_product['id'] : ''; ?>" method="post" class="product-form">
+                        <?php if ($editing_product): ?>
+                            <input type="hidden" name="product_id" value="<?php echo $editing_product['id']; ?>">
+                        <?php endif; ?>
+                        
                         <div class="form-group">
                             <label for="product_name">Product Name</label>
-                            <input type="text" id="product_name" name="product_name" required>
+                            <input type="text" id="product_name" name="product_name" value="<?php echo $editing_product ? htmlspecialchars($editing_product['name']) : ''; ?>" required>
                         </div>
                         
                         <div class="form-group">
                             <label for="product_description">Description</label>
-                            <textarea id="product_description" name="product_description" rows="4" required></textarea>
+                            <textarea id="product_description" name="product_description" rows="4" required><?php echo $editing_product ? htmlspecialchars($editing_product['description']) : ''; ?></textarea>
                         </div>
                         
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="product_price">Price ($)</label>
-                                <input type="number" id="product_price" name="product_price" step="0.01" min="0" required>
+                                <input type="number" id="product_price" name="product_price" step="0.01" min="0" value="<?php echo $editing_product ? $editing_product['price'] : ''; ?>" required>
                             </div>
                             
                             <div class="form-group">
                                 <label for="product_stock">Stock</label>
-                                <input type="number" id="product_stock" name="product_stock" min="0" required>
+                                <input type="number" id="product_stock" name="product_stock" min="0" value="<?php echo $editing_product ? $editing_product['stock'] : ''; ?>" required>
                             </div>
                         </div>
                         
@@ -172,30 +209,34 @@ include 'includes/header.php';
                             <label for="product_category">Category</label>
                             <select id="product_category" name="product_category" required>
                                 <option value="">Select Category</option>
-                                <option value="smartphones">Smartphones</option>
-                                <option value="laptops">Laptops</option>
-                                <option value="audio">Audio</option>
-                                <option value="wearables">Wearables</option>
-                                <option value="tvs">TVs</option>
-                                <option value="cameras">Cameras</option>
-                                <option value="gaming">Gaming</option>
+                                <option value="smartphones" <?php echo ($editing_product && $editing_product['category'] == 'smartphones') ? 'selected' : ''; ?>>Smartphones</option>
+                                <option value="laptops" <?php echo ($editing_product && $editing_product['category'] == 'laptops') ? 'selected' : ''; ?>>Laptops</option>
+                                <option value="audio" <?php echo ($editing_product && $editing_product['category'] == 'audio') ? 'selected' : ''; ?>>Audio</option>
+                                <option value="wearables" <?php echo ($editing_product && $editing_product['category'] == 'wearables') ? 'selected' : ''; ?>>Wearables</option>
+                                <option value="tvs" <?php echo ($editing_product && $editing_product['category'] == 'tvs') ? 'selected' : ''; ?>>TVs</option>
+                                <option value="cameras" <?php echo ($editing_product && $editing_product['category'] == 'cameras') ? 'selected' : ''; ?>>Cameras</option>
+                                <option value="gaming" <?php echo ($editing_product && $editing_product['category'] == 'gaming') ? 'selected' : ''; ?>>Gaming</option>
                             </select>
                         </div>
                         
                         <div class="form-group">
                             <label for="product_image">Product Image URL</label>
-                            <input type="text" id="product_image" name="product_image" placeholder="https://example.com/image.jpg" required>
+                            <input type="text" id="product_image" name="product_image" placeholder="https://example.com/image.jpg" value="<?php echo $editing_product ? htmlspecialchars($editing_product['image']) : ''; ?>" required>
                             <small>Enter a valid image URL. For example: https://images.unsplash.com/photo-1511707171634-5f897ff02aa9</small>
                         </div>
                         
                         <div class="form-group">
                             <label for="product_featured">Featured Product</label>
-                            <input type="checkbox" id="product_featured" name="product_featured" value="1">
+                            <input type="checkbox" id="product_featured" name="product_featured" value="1" <?php echo ($editing_product && $editing_product['featured']) ? 'checked' : ''; ?>>
                         </div>
                         
                         <div class="form-actions">
                             <button type="button" id="cancel-product-btn" class="btn btn-secondary">Cancel</button>
-                            <button type="submit" name="add_product" class="btn">Add Product</button>
+                            <?php if ($editing_product): ?>
+                                <button type="submit" name="update_product" class="btn">Update Product</button>
+                            <?php else: ?>
+                                <button type="submit" name="add_product" class="btn">Add Product</button>
+                            <?php endif; ?>
                         </div>
                     </form>
                 </div>
@@ -338,13 +379,48 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (addProductBtn && cancelProductBtn && productFormContainer) {
         addProductBtn.addEventListener('click', function() {
+            // Clear form values when adding a new product
+            const form = productFormContainer.querySelector('form');
+            if (form) {
+                form.reset();
+                // Update form action and title for add mode
+                form.action = 'admin.php?tab=products';
+                productFormContainer.querySelector('h3').textContent = 'Add New Product';
+                
+                // Remove any hidden product_id field
+                const hiddenField = form.querySelector('input[name="product_id"]');
+                if (hiddenField) {
+                    hiddenField.remove();
+                }
+                
+                // Change submit button to Add Product
+                const submitBtn = form.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.name = 'add_product';
+                    submitBtn.textContent = 'Add Product';
+                }
+            }
+            
             productFormContainer.style.display = 'block';
         });
         
         cancelProductBtn.addEventListener('click', function() {
             productFormContainer.style.display = 'none';
+            // Redirect to products tab without edit parameter if we're in edit mode
+            if (window.location.href.includes('&edit=')) {
+                window.location.href = 'admin.php?tab=products';
+            }
         });
     }
+    
+    // Handle edit buttons (non-AJAX)
+    const editButtons = document.querySelectorAll('.btn-edit');
+    editButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            // Let the link navigate normally to edit mode
+            // The form will be pre-populated with the product data on page load
+        });
+    });
     
     // Handle processing orders via AJAX
     const processButtons = document.querySelectorAll('.btn-process');
